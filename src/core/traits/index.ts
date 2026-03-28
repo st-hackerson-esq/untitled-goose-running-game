@@ -20,4 +20,6 @@ export const Player = trait({ index: 0, name: "" });
 export const Wind = trait({ strength: 0.15, speed: 0.8 });
 export const GrassBase = trait(() => null! as Float32Array);
 
+export const PlayerInput = trait({ speed: 0 });
+
 export const Follow = relation({ exclusive: true });

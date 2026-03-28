@@ -8,6 +8,7 @@ import {
   IsGrass,
   OrthographicCamera,
   Player,
+  PlayerInput,
   Position,
   RaceProgress,
   Rotation,
@@ -18,9 +19,24 @@ const GRASS_SAMPLES = 30;
 const PATCHES_PER_SIDE = 3;
 const TRACK_HALF_WIDTH = 2.2;
 const GOOSE_NAMES = [
-  "Puddles", "Biscuit", "Noodle", "Mochi", "Pickles", "Waffles",
-  "Pebbles", "Sprout", "Nugget", "Ducky", "Peaches", "Cupcake",
-  "Bubbles", "Muffin", "Turnip", "Clover", "Truffle", "Dumpling",
+  "Puddles",
+  "Biscuit",
+  "Noodle",
+  "Mochi",
+  "Pickles",
+  "Waffles",
+  "Pebbles",
+  "Sprout",
+  "Nugget",
+  "Ducky",
+  "Peaches",
+  "Cupcake",
+  "Bubbles",
+  "Muffin",
+  "Turnip",
+  "Clover",
+  "Truffle",
+  "Dumpling",
 ];
 const _pt = new THREE.Vector3();
 const _tan = new THREE.Vector3();
@@ -38,12 +54,14 @@ function randomGooseName() {
 
 export const actions = createActions((world) => ({
   spawnGoose: ({ index, name }: { index: number; name?: string }) => {
-    return world.spawn(
+    const entity = world.spawn(
       Position,
       IsGoose,
       RaceProgress({ value: 0 }),
       Player({ index, name: name ?? randomGooseName() }),
     );
+    if (index === 0) entity.add(PlayerInput);
+    return entity;
   },
   spawnGrassAlongTrack: () => {
     const patches: Entity[] = [];
@@ -60,13 +78,21 @@ export const actions = createActions((world) => ({
 
         patches.push(
           world.spawn(
-            Position({ x: _pt.x + _normal.x * dist + jitterX, y: 0, z: _pt.z + _normal.z * dist }),
+            Position({
+              x: _pt.x + _normal.x * dist + jitterX,
+              y: 0,
+              z: _pt.z + _normal.z * dist,
+            }),
             IsGrass,
           ),
         );
         patches.push(
           world.spawn(
-            Position({ x: _pt.x - _normal.x * dist + jitterX, y: 0, z: _pt.z - _normal.z * dist }),
+            Position({
+              x: _pt.x - _normal.x * dist + jitterX,
+              y: 0,
+              z: _pt.z - _normal.z * dist,
+            }),
             IsGrass,
           ),
         );
