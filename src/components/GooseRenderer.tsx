@@ -30,6 +30,7 @@ function GooseView({ entity }: { entity: Entity }) {
   useTraitEffect(entity, RaceProgress, (progress) => {
     if (progress && progress.value >= 1) {
       actions["GooseRun"]?.fadeOut(0.3);
+      actions["GooseIdle"]?.reset().fadeIn(0.2).play();
     }
   });
 
