@@ -36,7 +36,9 @@ function CameraView({ entity }: { entity: Entity }) {
     cam.updateProjectionMatrix();
   }, [size]);
 
-  return <orthographicCamera ref={handleInit} near={-100} far={100} zoom={100} />;
+  return (
+    <orthographicCamera ref={handleInit} near={-100} far={100} zoom={100} />
+  );
 }
 
 export function CameraRenderer() {

@@ -2,7 +2,7 @@ import * as THREE from "three";
 import type { World } from "koota";
 import { Follow, Position, Rotation } from "../traits";
 
-const CAMERA_OFFSET = new THREE.Vector3(-5, 8, 5);
+const CAMERA_OFFSET = new THREE.Vector3(-5, 3, 5);
 const _camPos = new THREE.Vector3();
 const _target = new THREE.Vector3();
 const _matrix = new THREE.Matrix4();
