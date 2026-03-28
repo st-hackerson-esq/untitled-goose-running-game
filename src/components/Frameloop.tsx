@@ -3,7 +3,8 @@ import { useWorld } from "koota/react";
 import { updateTime } from "@/core/systems/update-time";
 import { advanceRace } from "@/core/systems/advance-race";
 import { mapProgressToTrack } from "@/core/systems/map-progress-to-track";
-import { syncPosition } from "@/core/systems/sync-position";
+import { followTarget } from "@/core/systems/follow-player";
+import { syncTransform } from "@/core/systems/sync-transform";
 
 export function Frameloop() {
   const world = useWorld();
@@ -12,7 +13,8 @@ export function Frameloop() {
     updateTime(world);
     advanceRace(world);
     mapProgressToTrack(world);
-    syncPosition(world);
+    followTarget(world);
+    syncTransform(world);
   });
 
   return null;
