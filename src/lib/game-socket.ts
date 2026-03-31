@@ -1,5 +1,5 @@
 import { Channel, Presence } from "phoenix";
-import { getSocket, getPlayerId, connectSocket } from "./socket";
+import { getSocket, connectSocket } from "./socket";
 
 export type GamePlayer = {
   id: string;
@@ -27,14 +27,17 @@ function collectPlayers(presence: Presence): GamePlayer[] {
   return players;
 }
 
+const READY_TIMEOUT = 5000;
+
 export function joinGame(
   gameId: string,
   playerName: string,
+  existingPlayerId: string | undefined,
+  expectedPlayers: number,
   callbacks: GameCallbacks,
 ): Promise<{ players: GamePlayer[] }> {
-  // Ensure socket is connected (handles direct URL navigation to game page)
   if (!getSocket()) {
-    connectSocket(playerName);
+    connectSocket(playerName, existingPlayerId);
   }
 
   const socket = getSocket()!;
@@ -42,15 +45,29 @@ export function joinGame(
   gamePresence = new Presence(gameChannel);
 
   return new Promise((resolve, reject) => {
-    let initialSyncDone = false;
+    let resolved = false;
+
+    const doResolve = (players: GamePlayer[]) => {
+      if (resolved) return;
+      resolved = true;
+      resolve({ players });
+    };
+
+    // Timeout: resolve with whatever players are present
+    const timer = setTimeout(() => {
+      if (!gamePresence) return;
+      doResolve(collectPlayers(gamePresence));
+    }, READY_TIMEOUT);
 
     gamePresence!.onSync(() => {
-      const players = collectPlayers(gamePresence!);
-      if (!initialSyncDone) {
-        initialSyncDone = true;
-        resolve({ players });
-      }
+      if (!gamePresence) return;
+      const players = collectPlayers(gamePresence);
       callbacks.onPlayersChanged(players);
+      // Wait until all expected players have joined
+      if (players.length >= expectedPlayers) {
+        clearTimeout(timer);
+        doResolve(players);
+      }
     });
 
     gameChannel!.on("position_update", (payload: { player_id: string; progress: number }) => {
@@ -74,11 +91,6 @@ export function joinGame(
   });
 }
 
-export function getGamePlayers(): GamePlayer[] {
-  if (!gamePresence) return [];
-  return collectPlayers(gamePresence);
-}
-
 export function startGame(): void {
   gameChannel?.push("start_game", {});
 }
@@ -88,42 +100,6 @@ export function sendPositionUpdate(progress: number): void {
   if (now - lastSendTime < SEND_INTERVAL) return;
   lastSendTime = now;
   gameChannel?.push("position_update", { progress });
-}
-
-export function isInGame(): boolean {
-  return gameChannel !== null;
-}
-
-export function updateGameCallbacks(callbacks: Partial<GameCallbacks>): void {
-  if (!gameChannel) return;
-
-  if (callbacks.onPositionUpdate) {
-    gameChannel.off("position_update");
-    gameChannel.on("position_update", (payload: { player_id: string; progress: number }) => {
-      callbacks.onPositionUpdate!(payload.player_id, payload.progress);
-    });
-  }
-
-  if (callbacks.onGameStarted) {
-    gameChannel.off("game_started");
-    gameChannel.on("game_started", () => {
-      callbacks.onGameStarted!();
-    });
-  }
-
-  if (callbacks.onPlayersChanged && gamePresence) {
-    gamePresence.onSync(() => {
-      const players = collectPlayers(gamePresence!);
-      callbacks.onPlayersChanged!(players);
-    });
-  }
-
-  if (callbacks.onGameEnded) {
-    gameChannel.off("game_ended");
-    gameChannel.on("game_ended", () => {
-      callbacks.onGameEnded!();
-    });
-  }
 }
 
 export function leaveGame(): void {

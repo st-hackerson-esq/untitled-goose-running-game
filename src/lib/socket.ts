@@ -21,9 +21,9 @@ export type GameInfo = {
   created_at: string;
 };
 
-export function connectSocket(playerName: string) {
+export function connectSocket(playerName: string, existingPlayerId?: string) {
   if (socket) return;
-  playerId = `${playerName}-${Date.now().toString(36)}`;
+  playerId = existingPlayerId ?? `${playerName}-${Date.now().toString(36)}`;
   socket = new Socket(SOCKET_URL, {
     params: { player_id: playerId, player_name: playerName },
   });
@@ -92,12 +92,6 @@ export function onGameCreated(callback: (game: GameInfo) => void): void {
 
 export function offGameCreated(): void {
   lobbyChannel?.off("game_created");
-}
-
-export function disconnectFromLobby() {
-  lobbyChannel?.leave();
-  lobbyChannel = null;
-  lobbyPresence = null;
 }
 
 export function disconnectSocket() {

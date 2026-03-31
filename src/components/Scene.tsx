@@ -6,7 +6,15 @@ import { CameraRenderer } from "./CameraRenderer";
 import { Frameloop } from "./Frameloop";
 import { Startup } from "./Startup";
 
-const Scene = ({ playerName, gameId }: { playerName: string; gameId: string }) => {
+type SceneProps = {
+  playerName: string;
+  gameId: string;
+  playerId: string;
+  playerCount: number;
+  onGameEnded: () => void;
+};
+
+const Scene = ({ playerName, gameId, playerId, playerCount, onGameEnded }: SceneProps) => {
   return (
     <Canvas
       style={{ position: "fixed", inset: 0, width: "100vw", height: "100vh" }}
@@ -18,7 +26,7 @@ const Scene = ({ playerName, gameId }: { playerName: string; gameId: string }) =
         <CameraRenderer />
       </group>
       <Frameloop />
-      <Startup playerName={playerName} gameId={gameId} />
+      <Startup playerName={playerName} gameId={gameId} playerId={playerId} playerCount={playerCount} onGameEnded={onGameEnded} />
       <directionalLight position={[-5, 10, 5]} intensity={1.5} />
       <ambientLight intensity={0.4} />
     </Canvas>

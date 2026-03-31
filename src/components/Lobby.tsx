@@ -1,13 +1,12 @@
 import { useState, useEffect, useCallback, useRef } from "react";
-import { useRouter } from "next/router";
 import {
   connectToLobby,
-  disconnectFromLobby,
   disconnectSocket,
   createGame,
   listGames,
   onGameCreated,
   offGameCreated,
+  getPlayerId,
   type LobbyPlayer,
   type GameInfo,
 } from "@/lib/socket";
@@ -26,7 +25,14 @@ function pickEmoji(id: string) {
   return GOOSE_EMOJIS[Math.abs(hash) % GOOSE_EMOJIS.length];
 }
 
-export default function Lobby() {
+type GameParams = {
+  playerName: string;
+  gameId: string;
+  playerId: string;
+  playerCount: number;
+};
+
+export function Lobby({ onStartGame }: { onStartGame: (params: GameParams) => void }) {
   const [name, setName] = useState("");
   const [joined, setJoined] = useState(false);
   const [myName, setMyName] = useState("");
@@ -38,15 +44,14 @@ export default function Lobby() {
   const [error, setError] = useState("");
   const [connecting, setConnecting] = useState(false);
   const inputRef = useRef<HTMLInputElement>(null);
-  const inGameRef = useRef(false);
-  const router = useRouter();
+  const gamePlayersRef = useRef<GamePlayer[]>([]);
 
   useEffect(() => {
     inputRef.current?.focus();
     return () => {
       offGameCreated();
-      disconnectFromLobby();
-      if (!inGameRef.current) disconnectSocket();
+      leaveGame();
+      disconnectSocket();
     };
   }, []);
 
@@ -63,11 +68,9 @@ export default function Lobby() {
         setMyName(trimmed);
         setJoined(true);
 
-        // Fetch existing games
         const existingGames = await listGames();
         setGames(existingGames);
 
-        // Listen for new games
         onGameCreated((game: GameInfo) => {
           setGames((prev) => {
             if (prev.some((g) => g.id === game.id)) return prev;
@@ -91,7 +94,7 @@ export default function Lobby() {
 
   const handleLeave = useCallback(() => {
     offGameCreated();
-    disconnectFromLobby();
+    leaveGame();
     disconnectSocket();
     setJoined(false);
     setPlayers([]);
@@ -99,38 +102,43 @@ export default function Lobby() {
     setMyName("");
   }, []);
 
-  const navigateToGame = useCallback((gameId: string) => {
-    inGameRef.current = true;
-    router.push({ pathname: "/game", query: { name: myName, gameId } });
-  }, [myName, router]);
+  const navigateToGame = useCallback((gameId: string, playerCount: number) => {
+    const pid = getPlayerId();
+    onStartGame({ playerName: myName, gameId, playerId: pid ?? "", playerCount });
+  }, [myName, onStartGame]);
+
+  const updateGamePlayers = useCallback((players: GamePlayer[]) => {
+    gamePlayersRef.current = players;
+    setGamePlayers(players);
+  }, []);
 
   const handleCreateGame = useCallback(async () => {
     try {
       const game = await createGame(`${myName}'s Race`);
       setIsCreator(true);
 
-      const { players: gamePlrs } = await joinGame(game.id, myName, {
-        onPlayersChanged: setGamePlayers,
+      const { players: gamePlrs } = await joinGame(game.id, myName, undefined, 1, {
+        onPlayersChanged: updateGamePlayers,
         onPositionUpdate: () => {},
-        onGameStarted: () => navigateToGame(game.id),
+        onGameStarted: () => navigateToGame(game.id, gamePlayersRef.current.length),
       });
-      setGamePlayers(gamePlrs);
+      updateGamePlayers(gamePlrs);
       setCurrentGameId(game.id);
     } catch (err) {
       setError("Failed to create game");
       console.error(err);
     }
-  }, [myName, navigateToGame]);
+  }, [myName, navigateToGame, updateGamePlayers]);
 
   const handleJoinGame = useCallback(
     async (gameId: string) => {
       try {
-        const { players: gamePlrs } = await joinGame(gameId, myName, {
-          onPlayersChanged: setGamePlayers,
+        const { players: gamePlrs } = await joinGame(gameId, myName, undefined, 1, {
+          onPlayersChanged: updateGamePlayers,
           onPositionUpdate: () => {},
-          onGameStarted: () => navigateToGame(gameId),
+          onGameStarted: () => navigateToGame(gameId, gamePlayersRef.current.length),
         });
-        setGamePlayers(gamePlrs);
+        updateGamePlayers(gamePlrs);
         setCurrentGameId(gameId);
         setIsCreator(false);
       } catch (err) {
@@ -138,7 +146,7 @@ export default function Lobby() {
         console.error(err);
       }
     },
-    [myName, navigateToGame],
+    [myName, navigateToGame, updateGamePlayers],
   );
 
   const handleLeaveGame = useCallback(() => {
@@ -187,7 +195,6 @@ export default function Lobby() {
             {error && <p style={styles.error}>{error}</p>}
           </form>
         ) : currentGameId ? (
-          /* Game waiting room */
           <div style={styles.lobbyContent}>
             <div style={styles.welcomeBar}>
               <span>
@@ -241,7 +248,6 @@ export default function Lobby() {
             {error && <p style={styles.error}>{error}</p>}
           </div>
         ) : (
-          /* Lobby view */
           <div style={styles.lobbyContent}>
             <div style={styles.welcomeBar}>
               <span>

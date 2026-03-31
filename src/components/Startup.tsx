@@ -1,14 +1,10 @@
 import { useEffect } from "react";
-import { useRouter } from "next/router";
 import { useActions, useWorld } from "koota/react";
 import type { Entity } from "koota";
 import { actions, GOOSE_NAMES } from "@/core/actions";
 import { RaceProgress } from "@/core/traits";
 import {
   joinGame,
-  getGamePlayers,
-  isInGame,
-  updateGameCallbacks,
   leaveGame,
   type GamePlayer,
 } from "@/lib/game-socket";
@@ -20,10 +16,17 @@ function randomGooseName(): string {
   return GOOSE_NAMES[Math.floor(Math.random() * GOOSE_NAMES.length)];
 }
 
-export function Startup({ playerName, gameId }: { playerName: string; gameId: string }) {
+type StartupProps = {
+  playerName: string;
+  gameId: string;
+  playerId: string;
+  playerCount: number;
+  onGameEnded: () => void;
+};
+
+export function Startup({ playerName, gameId, playerId, playerCount, onGameEnded }: StartupProps) {
   const { spawnGoose, spawnGrassAlongTrack, spawnCamera } = useActions(actions);
   const world = useWorld();
-  const router = useRouter();
 
   useEffect(() => {
     let selfEntity: Entity;
@@ -33,16 +36,14 @@ export function Startup({ playerName, gameId }: { playerName: string; gameId: st
     let camera: Entity;
     let destroyed = false;
 
-    const handlePositionUpdate = (playerId: string, progress: number) => {
-      const entity = remoteEntities.get(playerId);
+    const handlePositionUpdate = (remotePlayerId: string, progress: number) => {
+      const entity = remoteEntities.get(remotePlayerId);
       if (entity?.isAlive()) {
         entity.set(RaceProgress, { value: progress });
       }
     };
 
     function spawnEntities(remotePlayers: GamePlayer[]) {
-      // Sort all human players alphabetically by name for deterministic index assignment
-      // This ensures every client assigns the same color/lane to the same player
       const allPlayers = [
         { id: "__self__", name: playerName },
         ...remotePlayers,
@@ -60,7 +61,6 @@ export function Startup({ playerName, gameId }: { playerName: string; gameId: st
         nextIndex++;
       }
 
-      // Fill remaining with AI
       while (nextIndex < TOTAL_GEESE) {
         const aiName = randomGooseName() + " (AI)";
         aiEntities.push(spawnGoose({ index: nextIndex, name: aiName }));
@@ -71,40 +71,27 @@ export function Startup({ playerName, gameId }: { playerName: string; gameId: st
       camera = spawnCamera(selfEntity!);
     }
 
-    const handleGameEnded = () => {
-      router.push("/lobby");
-    };
-
     async function init() {
       if (!gameId) {
-        // Single player mode - no server connection
         spawnEntities([]);
         return;
       }
 
-      if (isInGame()) {
-        // Already joined from lobby - reuse existing channel
-        const players = getGamePlayers();
-        const remotePlayers = players.filter((p) => p.name !== playerName);
-        spawnEntities(remotePlayers);
-        updateGameCallbacks({
-          onPositionUpdate: handlePositionUpdate,
-          onPlayersChanged: () => {},
-          onGameStarted: () => {},
-          onGameEnded: handleGameEnded,
-        });
-      } else {
-        // Direct navigation - need to connect
-        const { players } = await joinGame(gameId, playerName, {
+      const { players } = await joinGame(
+        gameId,
+        playerName,
+        playerId || undefined,
+        playerCount,
+        {
           onPlayersChanged: () => {},
           onPositionUpdate: handlePositionUpdate,
           onGameStarted: () => {},
-          onGameEnded: handleGameEnded,
-        });
-        if (destroyed) return;
-        const remotePlayers = players.filter((p) => p.name !== playerName);
-        spawnEntities(remotePlayers);
-      }
+          onGameEnded,
+        },
+      );
+      if (destroyed) return;
+      const remotePlayers = players.filter((p) => p.name !== playerName);
+      spawnEntities(remotePlayers);
     }
 
     init();
@@ -119,7 +106,7 @@ export function Startup({ playerName, gameId }: { playerName: string; gameId: st
       leaveGame();
       disconnectSocket();
     };
-  }, [playerName, gameId, spawnGoose, spawnGrassAlongTrack, spawnCamera, world]);
+  }, [playerName, gameId, playerId, playerCount, onGameEnded, spawnGoose, spawnGrassAlongTrack, spawnCamera, world]);
 
   return null;
 }
