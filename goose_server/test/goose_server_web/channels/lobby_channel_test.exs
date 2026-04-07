@@ -30,33 +30,35 @@ defmodule GooseServerWeb.LobbyChannelTest do
     end
 
     test "duplicate player_name is rejected" do
-      {:ok, socket1} =
-        connect(UserSocket, %{"player_id" => "alice1", "player_name" => "Alice"})
+      {:ok, socket1} = connect(UserSocket, %{"player_id" => "alice1"})
 
-      {:ok, _reply, _socket1} = subscribe_and_join(socket1, "lobby", %{})
+      {:ok, _reply, _socket1} =
+        subscribe_and_join(socket1, "lobby", %{"player_name" => "Alice"})
 
-      {:ok, socket2} =
-        connect(UserSocket, %{"player_id" => "alice2", "player_name" => "Alice"})
+      {:ok, socket2} = connect(UserSocket, %{"player_id" => "alice2"})
 
       assert {:error, %{reason: "name_taken"}} =
-               subscribe_and_join(socket2, "lobby", %{})
+               subscribe_and_join(socket2, "lobby", %{"player_name" => "Alice"})
     end
 
     test "different player_names can both join" do
-      {:ok, socket1} =
-        connect(UserSocket, %{"player_id" => "alice1", "player_name" => "Alice"})
+      {:ok, socket1} = connect(UserSocket, %{"player_id" => "alice1"})
 
-      {:ok, _reply, _socket1} = subscribe_and_join(socket1, "lobby", %{})
+      {:ok, _reply, _socket1} =
+        subscribe_and_join(socket1, "lobby", %{"player_name" => "Alice"})
 
-      {:ok, socket2} =
-        connect(UserSocket, %{"player_id" => "bob1", "player_name" => "Bob"})
+      {:ok, socket2} = connect(UserSocket, %{"player_id" => "bob1"})
 
-      {:ok, _reply, _socket2} = subscribe_and_join(socket2, "lobby", %{})
+      {:ok, _reply, _socket2} =
+        subscribe_and_join(socket2, "lobby", %{"player_name" => "Bob"})
+
       assert_push "presence_state", %{}
     end
 
     test "presence includes player_name metadata", %{socket: socket} do
-      {:ok, _reply, _socket} = subscribe_and_join(socket, "lobby", %{})
+      {:ok, _reply, _socket} =
+        subscribe_and_join(socket, "lobby", %{"player_name" => "Alice"})
+
       assert_push "presence_state", presence
 
       assert %{"player1" => %{metas: [meta | _]}} = presence

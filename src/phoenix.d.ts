@@ -4,23 +4,34 @@ declare module "phoenix" {
     connect(): void;
     disconnect(): void;
     channel(topic: string, params?: Record<string, unknown>): Channel;
+    onOpen(callback: () => void): number;
+    onClose(callback: (event?: { code?: number }) => void): number;
+    onError(callback: (error?: unknown) => void): number;
+    isConnected(): boolean;
   }
 
   export class Channel {
+    readonly topic: string;
     join(): Push;
     leave(): Push;
     push(event: string, payload?: Record<string, unknown>): Push;
-    on(event: string, callback: (payload: any) => void): number;
+    on<T = unknown>(event: string, callback: (payload: T) => void): number;
     off(event: string, ref?: number): void;
+    isJoined(): boolean;
   }
 
   export class Push {
-    receive(status: string, callback: (response: any) => void): Push;
+    receive<T = unknown>(
+      status: string,
+      callback: (response: T) => void,
+    ): Push;
   }
 
   export class Presence {
     constructor(channel: Channel);
     onSync(callback: () => void): void;
-    list(callback?: (id: string, presence: any) => void): Record<string, any>;
+    list<T = unknown>(
+      callback?: (id: string, presence: T) => void,
+    ): Record<string, T>;
   }
 }

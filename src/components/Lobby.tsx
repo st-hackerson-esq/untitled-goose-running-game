@@ -1,12 +1,13 @@
 import { useState, useEffect, useCallback, useRef } from "react";
 import {
-  connectToLobby,
-  disconnectSocket,
+  joinLobbyChannel,
+  leaveLobbyChannel,
   createGame,
   listGames,
   onGameCreated,
   offGameCreated,
-  getPlayerId,
+  onGameDeleted,
+  offGameDeleted,
   type LobbyPlayer,
   type GameInfo,
 } from "@/lib/socket";
@@ -16,6 +17,7 @@ import {
   leaveGame,
   type GamePlayer,
 } from "@/lib/game-socket";
+import { useConnection } from "@/lib/socket-provider";
 
 const GOOSE_EMOJIS = ["🪿", "🦆", "🐥", "🥚", "🐣", "🦢"];
 
@@ -33,9 +35,9 @@ type GameParams = {
 };
 
 export function Lobby({ onStartGame }: { onStartGame: (params: GameParams) => void }) {
-  const [name, setName] = useState("");
-  const [joined, setJoined] = useState(false);
-  const [myName, setMyName] = useState("");
+  const { playerId, playerName, setPlayerName } = useConnection();
+
+  const [name, setName] = useState(playerName ?? "");
   const [players, setPlayers] = useState<LobbyPlayer[]>([]);
   const [games, setGames] = useState<GameInfo[]>([]);
   const [currentGameId, setCurrentGameId] = useState<string | null>(null);
@@ -46,66 +48,91 @@ export function Lobby({ onStartGame }: { onStartGame: (params: GameParams) => vo
   const inputRef = useRef<HTMLInputElement>(null);
   const gamePlayersRef = useRef<GamePlayer[]>([]);
 
+  // Auto-join the lobby channel when we have a player name. Idempotent on
+  // the lib side, so this safely re-runs after Lobby remounts (e.g. coming
+  // back from a finished game) without re-joining.
   useEffect(() => {
-    inputRef.current?.focus();
-    return () => {
-      offGameCreated();
-      leaveGame();
-      disconnectSocket();
-    };
-  }, []);
+    if (!playerName) {
+      inputRef.current?.focus();
+      return;
+    }
 
-  const handleJoin = useCallback(
-    async (e: React.FormEvent) => {
-      e.preventDefault();
-      const trimmed = name.trim();
-      if (!trimmed || connecting) return;
+    let cancelled = false;
+    setConnecting(true);
+    setError("");
 
-      setConnecting(true);
-      setError("");
+    (async () => {
       try {
-        await connectToLobby(trimmed, setPlayers);
-        setMyName(trimmed);
-        setJoined(true);
+        await joinLobbyChannel(playerName, setPlayers);
+        if (cancelled) return;
 
         const existingGames = await listGames();
+        if (cancelled) return;
         setGames(existingGames);
 
-        onGameCreated((game: GameInfo) => {
-          setGames((prev) => {
-            if (prev.some((g) => g.id === game.id)) return prev;
-            return [...prev, game];
-          });
+        onGameCreated((game) => {
+          setGames((prev) => (prev.some((g) => g.id === game.id) ? prev : [...prev, game]));
+        });
+
+        onGameDeleted((payload) => {
+          setGames((prev) => prev.filter((g) => g.id !== payload.id));
         });
       } catch (err: unknown) {
+        if (cancelled) return;
         const msg = err instanceof Error ? err.message : "";
         if (msg.includes("name_taken")) {
           setError("That name is already taken. Please choose another.");
+          // Bug 1: bounce back to the name input on refused entry.
+          setPlayerName(null);
+          setName("");
         } else {
-          setError("Could not connect to server. Is the goose server running?");
+          setError("Could not join the lobby.");
+          console.error(err);
         }
-        console.error(err);
       } finally {
-        setConnecting(false);
+        if (!cancelled) setConnecting(false);
       }
+    })();
+
+    return () => {
+      cancelled = true;
+      offGameCreated();
+      offGameDeleted();
+    };
+  }, [playerName, setPlayerName]);
+
+  const handleJoin = useCallback(
+    (e: React.FormEvent) => {
+      e.preventDefault();
+      const trimmed = name.trim();
+      if (!trimmed || connecting) return;
+      setError("");
+      setPlayerName(trimmed);
     },
-    [name, connecting],
+    [name, connecting, setPlayerName],
   );
 
   const handleLeave = useCallback(() => {
     offGameCreated();
-    leaveGame();
-    disconnectSocket();
-    setJoined(false);
+    offGameDeleted();
+    leaveLobbyChannel();
+    setPlayerName(null);
+    setName("");
     setPlayers([]);
     setGames([]);
-    setMyName("");
-  }, []);
+  }, [setPlayerName]);
 
-  const navigateToGame = useCallback((gameId: string, playerCount: number) => {
-    const pid = getPlayerId();
-    onStartGame({ playerName: myName, gameId, playerId: pid ?? "", playerCount });
-  }, [myName, onStartGame]);
+  const navigateToGame = useCallback(
+    (gameId: string, playerCount: number) => {
+      onStartGame({
+        playerName: playerName ?? "",
+        gameId,
+        playerId: playerId ?? "",
+        playerCount,
+      });
+    },
+    [playerName, playerId, onStartGame],
+  );
 
   const updateGamePlayers = useCallback((players: GamePlayer[]) => {
     gamePlayersRef.current = players;
@@ -113,11 +140,12 @@ export function Lobby({ onStartGame }: { onStartGame: (params: GameParams) => vo
   }, []);
 
   const handleCreateGame = useCallback(async () => {
+    if (!playerName) return;
     try {
-      const game = await createGame(`${myName}'s Race`);
+      const game = await createGame(`${playerName}'s Race`);
       setIsCreator(true);
 
-      const { players: gamePlrs } = await joinGame(game.id, myName, undefined, 1, {
+      const { players: gamePlrs } = await joinGame(game.id, playerName, undefined, 1, {
         onPlayersChanged: updateGamePlayers,
         onPositionUpdate: () => {},
         onGameStarted: () => navigateToGame(game.id, gamePlayersRef.current.length),
@@ -128,12 +156,13 @@ export function Lobby({ onStartGame }: { onStartGame: (params: GameParams) => vo
       setError("Failed to create game");
       console.error(err);
     }
-  }, [myName, navigateToGame, updateGamePlayers]);
+  }, [playerName, navigateToGame, updateGamePlayers]);
 
   const handleJoinGame = useCallback(
     async (gameId: string) => {
+      if (!playerName) return;
       try {
-        const { players: gamePlrs } = await joinGame(gameId, myName, undefined, 1, {
+        const { players: gamePlrs } = await joinGame(gameId, playerName, undefined, 1, {
           onPlayersChanged: updateGamePlayers,
           onPositionUpdate: () => {},
           onGameStarted: () => navigateToGame(gameId, gamePlayersRef.current.length),
@@ -146,7 +175,7 @@ export function Lobby({ onStartGame }: { onStartGame: (params: GameParams) => vo
         console.error(err);
       }
     },
-    [myName, navigateToGame, updateGamePlayers],
+    [playerName, navigateToGame, updateGamePlayers],
   );
 
   const handleLeaveGame = useCallback(() => {
@@ -167,7 +196,7 @@ export function Lobby({ onStartGame }: { onStartGame: (params: GameParams) => vo
           <span style={styles.gooseIcon}>🪿</span> Goose Lobby
         </h1>
 
-        {!joined ? (
+        {!playerName ? (
           <form onSubmit={handleJoin} style={styles.form}>
             <p style={styles.subtitle}>
               Enter your name to join the waddle.
@@ -198,7 +227,7 @@ export function Lobby({ onStartGame }: { onStartGame: (params: GameParams) => vo
           <div style={styles.lobbyContent}>
             <div style={styles.welcomeBar}>
               <span>
-                Playing as <strong>{myName}</strong>
+                Playing as <strong>{playerName}</strong>
               </span>
               <button onClick={handleLeaveGame} style={styles.leaveButton}>
                 Leave Game
@@ -217,12 +246,12 @@ export function Lobby({ onStartGame }: { onStartGame: (params: GameParams) => vo
                   key={p.id}
                   style={{
                     ...styles.playerItem,
-                    ...(p.name === myName ? styles.playerItemMe : {}),
+                    ...(p.name === playerName ? styles.playerItemMe : {}),
                   }}
                 >
                   <span style={styles.playerEmoji}>{pickEmoji(p.id)}</span>
                   <span style={styles.playerName}>{p.name}</span>
-                  {p.name === myName && (
+                  {p.name === playerName && (
                     <span style={styles.youBadge}>you</span>
                   )}
                 </li>
@@ -251,7 +280,7 @@ export function Lobby({ onStartGame }: { onStartGame: (params: GameParams) => vo
           <div style={styles.lobbyContent}>
             <div style={styles.welcomeBar}>
               <span>
-                Playing as <strong>{myName}</strong>
+                Playing as <strong>{playerName}</strong>
               </span>
               <button onClick={handleLeave} style={styles.leaveButton}>
                 Leave
@@ -272,12 +301,12 @@ export function Lobby({ onStartGame }: { onStartGame: (params: GameParams) => vo
                     key={p.id}
                     style={{
                       ...styles.playerItem,
-                      ...(p.name === myName ? styles.playerItemMe : {}),
+                      ...(p.name === playerName ? styles.playerItemMe : {}),
                     }}
                   >
                     <span style={styles.playerEmoji}>{pickEmoji(p.id)}</span>
                     <span style={styles.playerName}>{p.name}</span>
-                    {p.name === myName && (
+                    {p.name === playerName && (
                       <span style={styles.youBadge}>you</span>
                     )}
                   </li>

@@ -3,7 +3,7 @@
   "version": "0.1.0",
   "private": true,
   "scripts": {
-    "dev": "concurrently -n next,phoenix -c cyan,magenta \"next dev\" \"cd goose_server && mix phx.server\"",
+    "dev": "bash -c 'next dev & p1=$!; (cd goose_server && exec mix phx.server) & p2=$!; trap \"kill $p1 $p2 2>/dev/null\" INT TERM EXIT; wait -n; kill $p1 $p2 2>/dev/null; wait'",
     "dev:next": "next dev",
     "dev:phoenix": "cd goose_server && mix phx.server",
     "build": "next build",
@@ -26,7 +26,6 @@
     "@types/react": "^19",
     "@types/react-dom": "^19",
     "@types/three": "^0.183.1",
-    "concurrently": "^9.2.1",
     "eslint": "^9",
     "eslint-config-next": "16.2.1",
     "typescript": "^5"

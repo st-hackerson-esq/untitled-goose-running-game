@@ -5,10 +5,8 @@ import { actions, GOOSE_NAMES } from "@/core/actions";
 import { RaceProgress } from "@/core/traits";
 import {
   joinGame,
-  leaveGame,
   type GamePlayer,
 } from "@/lib/game-socket";
-import { disconnectSocket } from "@/lib/socket";
 
 const TOTAL_GEESE = 4;
 
@@ -30,8 +28,8 @@ export function Startup({ playerName, gameId, playerId, playerCount, onGameEnded
 
   useEffect(() => {
     let selfEntity: Entity;
-    let remoteEntities = new Map<string, Entity>();
-    let aiEntities: Entity[] = [];
+    const remoteEntities = new Map<string, Entity>();
+    const aiEntities: Entity[] = [];
     let grass: Entity[];
     let camera: Entity;
     let destroyed = false;
@@ -97,14 +95,20 @@ export function Startup({ playerName, gameId, playerId, playerCount, onGameEnded
     init();
 
     return () => {
+      // Note: deliberately do NOT call leaveGame() here. Under React Strict
+      // Mode (and any future remount-driven cleanup), leaving the channel
+      // here would trigger a server-side terminate → remove_player → empty
+      // player set → game deletion, even though the user is still in the
+      // game. The channel is owned by the lib singleton and is either
+      // reused (idempotent rejoin to the same gameId) or replaced (on a
+      // join to a different gameId). Real "leave game" actions go through
+      // handleLeaveGame in Lobby, which calls leaveGame() explicitly.
       destroyed = true;
       camera?.destroy();
       grass?.forEach((g) => g.destroy());
       selfEntity?.destroy();
       remoteEntities.forEach((e) => e.destroy());
       aiEntities.forEach((e) => e.destroy());
-      leaveGame();
-      disconnectSocket();
     };
   }, [playerName, gameId, playerId, playerCount, onGameEnded, spawnGoose, spawnGrassAlongTrack, spawnCamera, world]);
 

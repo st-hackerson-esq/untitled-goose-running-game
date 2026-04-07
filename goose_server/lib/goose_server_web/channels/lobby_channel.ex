@@ -6,8 +6,8 @@ defmodule GooseServerWeb.LobbyChannel do
   alias GooseServer.GameRegistry
 
   @impl true
-  def join("lobby", _params, socket) do
-    player_name = socket.assigns.player_name
+  def join("lobby", params, socket) do
+    player_name = Map.get(params, "player_name", socket.assigns.player_id)
     Logger.info("player_name: #{player_name}")
 
     name_taken =
@@ -21,20 +21,21 @@ defmodule GooseServerWeb.LobbyChannel do
       {:error, %{reason: "name_taken"}}
     else
       send(self(), :after_join)
-      {:ok, socket}
+      {:ok, assign(socket, :player_name, player_name)}
     end
   end
 
   @impl true
   def handle_in("create_game", %{"name" => name}, socket) do
     game = GameRegistry.create_game(socket.assigns.player_id, name)
-    broadcast!(socket, "game_created", game)
-    {:reply, {:ok, game}, socket}
+    public = GameRegistry.public_view(game)
+    broadcast!(socket, "game_created", public)
+    {:reply, {:ok, public}, socket}
   end
 
   @impl true
   def handle_in("list_games", _params, socket) do
-    games = GameRegistry.list_games()
+    games = GameRegistry.list_open_games()
     {:reply, {:ok, %{games: games}}, socket}
   end
 
