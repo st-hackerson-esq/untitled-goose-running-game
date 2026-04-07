@@ -36,7 +36,7 @@ RUN . /root/.shrc && npm install
 COPY ./public ./public
 COPY ./src ./src
 COPY ./.agents ./.agents
-COPY ./tsconfig.json ./tsconfig.tsbuildinfo ./next.config.ts ./next-env.d.ts ./eslint.config.mjs ./
+COPY ./tsconfig.json ./next.config.ts ./next-env.d.ts ./eslint.config.mjs ./
 
 RUN . /root/.shrc && npx next build
 RUN ls -alh
