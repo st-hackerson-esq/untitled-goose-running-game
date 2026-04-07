@@ -11,8 +11,6 @@ help:
 	@echo ""
 	@echo "Development:"
 	@echo "  dev              Start both frontend and server for development"
-	@echo "  dev.frontend     Start only the Next.js dev server (port 3000)"
-	@echo "  dev.server       Start only the Phoenix server (port 4000)"
 	@echo ""
 	@echo "Production:"
 	@echo "  build            Build the frontend and copy to Phoenix static"
@@ -39,18 +37,9 @@ setup.server:
 # ── Development ────────────────────────────────────────
 
 dev:
-	@echo "Starting frontend (port 3000) and server (port 4000)..."
-	@echo "Open http://localhost:3000 to play"
 	@trap 'kill 0' EXIT; \
-		$(MAKE) dev.server & \
-		$(MAKE) dev.frontend & \
+		npm run dev & \
 		wait
-
-dev.frontend:
-	NEXT_PUBLIC_SOCKET_URL=ws://localhost:4000/socket npm run dev
-
-dev.server:
-	cd goose_server && mix phx.server
 
 # ── Production ─────────────────────────────────────────
 

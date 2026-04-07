@@ -1,11 +1,13 @@
 defmodule GooseServer.GameRegistry do
   use Agent
+  require Logger
 
   def start_link(_opts) do
     Agent.start_link(fn -> %{} end, name: __MODULE__)
   end
 
   def create_game(creator_id, name) do
+    Logger.info("creator_id: #{creator_id} made game #{name}")
     game_id = generate_id()
 
     game = %{
@@ -27,11 +29,17 @@ defmodule GooseServer.GameRegistry do
     Agent.get(__MODULE__, &Map.get(&1, game_id))
   end
 
+  def delete_game(game_id) do
+    Logger.warning("game #{game_id} deleted")
+    Agent.update(__MODULE__, &Map.delete(&1, game_id))
+  end
+
   def game_exists?(game_id) do
     Agent.get(__MODULE__, &Map.has_key?(&1, game_id))
   end
 
   def clear do
+    Logger.warning("games cleared")
     Agent.update(__MODULE__, fn _ -> %{} end)
   end
 
