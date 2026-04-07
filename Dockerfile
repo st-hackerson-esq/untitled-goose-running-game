@@ -81,7 +81,7 @@ RUN mix compile
 COPY ./goose_server/assets assets
 
 # grab the frontend app
-COPY --from=frontend-builder  /app/out/* priv/static/
+COPY --from=frontend-builder /app/out/ priv/static/
 
 # compile assets
 RUN mix phx.digest
