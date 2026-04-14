@@ -7,7 +7,7 @@ Players join a lobby, create or join a game, and race their geese by alternating
 ## Prerequisites
 
 - Node.js (v18+)
-- Elixir (v1.15+) and Erlang/OTP
+- Elixir (v1.19+) and Erlang/OTP
 
 ## Quick Start
 
