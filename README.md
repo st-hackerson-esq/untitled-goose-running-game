@@ -2,6 +2,7 @@
 
 A multiplayer goose racing game built with React Three Fiber and Phoenix.
 
+
 Players join a lobby, create or join a game, and race their geese by alternating Q and P keys. Goose positions sync in real-time via Phoenix channels. Empty slots are filled with AI geese.
 
 ## Prerequisites
